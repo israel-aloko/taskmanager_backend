@@ -6,6 +6,7 @@ const cookieParser = require('cookie-parser');
 
 const authRoutes = require('./routes/authRoutes');
 const registerRoutes = require('./routes/registerRoutes');
+const projectRoutes = require('./routes/projectRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,6 +30,8 @@ mongoose.connect(process.env.MONGODB_URI)
 
 app.use('/auth', authRoutes);
 app.use('/api', registerRoutes);
+app.use('/api/projects', projectRoutes);
+
 
 app.get('/', (req, res) => {
     res.send('TaskManager backend is alive!');
