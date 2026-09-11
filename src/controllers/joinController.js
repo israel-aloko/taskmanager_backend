@@ -1,0 +1,190 @@
+const Project = require('../models/Project');
+const JoinRequest = require('../models/JoinRequest');
+const generateJoinCode = require('../config/generateJoinCode');
+
+//generates a joinCode that doesn't collide with an existing one.
+async function generateUniqueJoinCode() {
+    let code;
+    let exists = true;
+
+    while (exists) {
+        code = generateJoinCode();
+        exists = await Project.exists({ joinCode: code });
+    }
+
+    return code;
+}
+
+//GET /api/projects/:id/join-code
+//Admin only. Returns the existing code, or generates one on first request.
+const getJoinCode = async (req, res) => {
+    try {
+        const project = req.project;
+
+        if (!project.joinCode) {
+            project.joinCode = await generateUniqueJoinCode();
+            await project.save();
+        }
+
+        return res.status(200).json({ joinCode: project.joinCode });
+    } catch (error) {
+        console.error('getJoinCode error:', error.message);
+        return res.status(500).json({ message: 'Server error fetching join code.' });
+    }
+};
+
+//POST /api/project/:id/regenerate-code
+//Admin only. Always issue a fresh code, invalidating the old one.
+const regenerateJoinCode = async (req, res) => {
+    try {
+        const project = req.project;
+
+        project.joinCode = await generateUniqueJoinCode();
+        await project.save();
+
+        return res.status(200).json({ message: 'Join code regenerated.', joinCode: project.joinCode });
+    } catch (error) {
+        console.error('regenerateJoinCode error:', error.message);
+        return res.status(500).json({ message: 'Server error regenerating join code.' });
+    }
+};
+
+//POST /api/projects/join
+//Any logged-in user. Body: { joinCode }
+const requestToJoin = async (req, res) => {
+    try {
+        const { joinCode } = req.body;
+        
+        if (!joinCode || !joinCode.trim()) {
+            return res.status(400).json({ message: 'A join code is required.'});
+        }
+
+        const project = await Project.findOne({ joinCode: joinCode.trim().toUpperCase()});
+
+        if (!project) {
+            return res.status(404).json({ message: 'Invalid join code.' });
+        }
+
+        const alreadyMember = project.members.some(
+            (m) => m.user.toString() === req.user._id.toString()
+        );
+
+        if (alreadyMember) {
+            return res.status(400).json({ message: 'You are already a member of this project.'});
+        }
+
+        const existingRequest = await JoinRequest.findOne({
+            project: project._id,
+            user: req.user._id,
+            status: 'pending',
+        });
+
+        if (existingRequest) {
+            return res.status(400).json({ message: 'You already have a pending request to join this project.' });
+        }
+
+        const joinRequest = await JoinRequest.create({
+            project: project._id,
+            user: req.user._id,
+        });
+
+        return res.status(201).json({
+            message: 'Join request submitted. Waiting for admin approval.',
+            joinRequest,
+            projectName: project.name,
+        });
+    } catch (error) {
+        console.error('requestToJoin error:', error.message);
+        return res.status(500).json({ message: 'Server error submitting join request.' });
+    }
+};
+
+//GET /api/project/:id/join-requests
+//Admin only. Lists pending requests for this project.
+const getJoinRequests = async (req, res) => {
+    try {
+        const joinRequests = await JoinRequest.find({
+            project: req.project._id,
+            status: 'pending',
+        })
+            .populate('user', 'fullname email')
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({ joinRequests });
+    } catch (error) {
+        console.error('getJoinRequests error:', error.message);
+        return res.status(500).json({ message: 'Server error fetching join requests.' });
+    }
+};
+
+//POST /api/projects/:id/join-requests/:reqId/approve
+//Admin only.
+const approveJoinRequest = async (req, res) => {
+    try {
+        const { reqId } = req.params;
+        const project = req.project;
+
+        const joinRequest = await joinRequest.findOne({ _id: reqId, project: project._id });
+
+        if (!joinRequest) {
+            return res.status(404).json({ message: 'Join request not found.'});
+        }
+
+        if (joinRequest.status !== 'pending') {
+            return res.status(400).json({ message: `This request has already been ${joinRequest.status}.`});
+        }
+
+        const alreadyMember = project.members.some(
+            (m) => m.user.toString() === joinRequest.user.toString()
+        );
+
+        if (!alreadyMember) {
+            project.members.push({ user: joinRequest.user, role: 'member' });
+            await project.save();
+        }
+
+        joinRequest.status = 'approved';
+        await joinRequest.save();
+
+        return res.status(200).json({ message: 'Join request approved.', project });
+    } catch (error) {
+        console.error('approveJoinRequest error:', error.message);
+        return res.status(500).json({ message: 'Server error approving join request.' });
+    }
+};
+
+// POST /api/projects/:id/join-requests/:reqId/reject
+// Admin only.
+const rejectJoinRequest = async (req, res) => {
+    try {
+        const { reqId } = req.params;
+        const project = req.project;
+ 
+        const joinRequest = await JoinRequest.findOne({ _id: reqId, project: project._id });
+ 
+        if (!joinRequest) {
+            return res.status(404).json({ message: 'Join request not found.' });
+        }
+ 
+        if (joinRequest.status !== 'pending') {
+            return res.status(400).json({ message: `This request has already been ${joinRequest.status}.` });
+        }
+ 
+        joinRequest.status = 'rejected';
+        await joinRequest.save();
+ 
+        return res.status(200).json({ message: 'Join request rejected.' });
+    } catch (error) {
+        console.error('rejectJoinRequest error:', error.message);
+        return res.status(500).json({ message: 'Server error rejecting join request.' });
+    }
+};
+
+module.exports = {
+    getJoinCode,
+    regenerateJoinCode,
+    requestToJoin,
+    getJoinRequests,
+    approveJoinRequest,
+    rejectJoinRequest,
+};

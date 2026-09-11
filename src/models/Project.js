@@ -33,7 +33,7 @@ const projectSchema = new mongoose.Schema(
             default: null,
         },
         owner: {
-            type: mongoose.Schema.Tyoes.ObjectId,
+            type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
             required: true,
         },

@@ -46,7 +46,7 @@ const getProjectById = async (req, res) => {
     try {
         const project = await req.project.populate(
             'members.user',
-            'firstName lastName email'
+            'fullname email'
         );
 
         return res.status(200).json({ project });

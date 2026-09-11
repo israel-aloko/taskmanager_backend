@@ -7,10 +7,6 @@ const { sendOtp } = require('./emailService');
 const SALT_ROUNDS = 10;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/;
 
-// function generateOtp() {
-//     return String(Math,floor(Math.random() * 1000000)).padStart(6, '0');
-// }
-
 async function register({ fullname, email, password, role }) {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -26,7 +22,6 @@ async function register({ fullname, email, password, role }) {
     }
 
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-    // const otp = generateOtp();
     const otp = crypto.randomInt(100000, 999999).toString();
 
     await VerificationToken.deleteMany({ email });

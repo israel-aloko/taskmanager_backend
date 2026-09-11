@@ -7,6 +7,8 @@ const verificationTokenSchema = new mongoose.Schema({
     password: { type: String, required: true},
     role: { type: String, default: 'user'},
     expiresAt: { type: Date, required: true},
+
+    inviteToken: { type: String, default: null },
 });
 
 //mongodb ttl index: automatically deletes the document once expiresAt passes
