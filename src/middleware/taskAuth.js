@@ -42,21 +42,41 @@ const requireTaskProjectMember = async (req, res, next) => {
 // task is assigned to. Used for the status-update route, where both roles
 // are allowed to act, unlike every other task route (admin-only).
 // Must run after requireTaskProjectMember (relies on req.task, req.membership).
-const requireTaskAdminOrAssignee = (req, res, next) => {
+const requireTaskStatusPermission = (req, res, next) => {
     if (!req.task || !req.membership) {
         return res.status(500).json({
-            message: 'requireTaskAdminOrAssignee used without requireTaskProjectMember running first.',
+            message: 'requireTaskStatusPermission used without requireTaskProjectMember running first.',
         });
     }
 
-    const isAdmin = req.membership.role === 'admin';
     const isAssignee = req.task.assignedTo && req.task.assignedTo.toString() === req.user._id.toString();
+    const isAdmin = req.membership.role === 'admin';
+    const isUnassigned = !req.task.assignedTo;
 
-    if (!isAdmin && !isAssignee) {
-        return res.status(403).json({ message: 'Only the project admin or the assigned member can update status.' });
+    const allowed = isAssignee || (isUnassigned && isAdmin);
+
+    if (!allowed) {
+        return res.status(403).json({ message: 'Only the assigned member can update this tasks status'});
     }
 
     next();
-};
+}
+// const requireTaskAdminOrAssignee = (req, res, next) => {
+//     if (!req.task || !req.membership) {
+//         return res.status(500).json({
+//             message: 'requireTaskAdminOrAssignee used without requireTaskProjectMember running first.',
+//         });
+//     }
 
-module.exports = { requireTaskProjectMember, requireTaskAdminOrAssignee };
+//     const isAdmin = req.membership.role === 'admin';
+//     const isAssignee = req.task.assignedTo && req.task.assignedTo.toString() === req.user._id.toString();
+
+//     if (!isAdmin && !isAssignee) {
+//         return res.status(403).json({ message: 'Only the project admin or the assigned member can update status.' });
+//     }
+
+//     next();
+// };
+
+module.exports = { requireTaskProjectMember, requireTaskStatusPermission };
+// module.exports = { requireTaskProjectMember, requireTaskAdminOrAssignee };

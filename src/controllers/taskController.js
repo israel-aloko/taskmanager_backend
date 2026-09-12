@@ -14,7 +14,7 @@ const createTask = async (req, res) => {
         // of this project before we let the admin assign them.
         if (assignedTo) {
             const isMember = req.project.members.some(
-                (m) => m.user.toStrin() === assignedTo.toString()
+                (m) => m.user.toString() === assignedTo.toString()
             );
             if (!isMember) {
                 return res.status(400).json({ message: 'Assignee must be a member of this project.' });

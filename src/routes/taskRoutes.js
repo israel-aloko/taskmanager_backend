@@ -1,7 +1,7 @@
 const express = require('express');
 const { getMyTasks, getTaskById, updateTask, updateTaskStatus, deleteTask } = require('../controllers/taskController');
 const isAuthenticated = require('../middleware/isAuthenticated');
-const { requireTaskProjectMember, requireTaskAdminOrAssignee } = require('../middleware/taskAuth');
+const { requireTaskProjectMember, requireTaskStatusPermission } = require('../middleware/taskAuth');
 const { requireProjectAdmin } = require('../middleware/projectAuth');
 const router = express.Router();
 
@@ -16,7 +16,7 @@ router.get('/:taskId', isAuthenticated, requireTaskProjectMember, getTaskById);
 router.patch('/:taskId', isAuthenticated, requireTaskProjectMember, requireProjectAdmin, updateTask);
 
 //PATCH /api/tasks/:taskId/status - admin OR the assignee
-router.patch('/:taskId/status', isAuthenticated, requireTaskProjectMember, requireTaskAdminOrAssignee, updateTaskStatus);
+router.patch('/:taskId/status', isAuthenticated, requireTaskProjectMember, requireTaskStatusPermission, updateTaskStatus);
 
 //DELETE /api/tasks/:taskId - admin only
 router.delete('/:taskId', isAuthenticated, requireTaskProjectMember, requireProjectAdmin, deleteTask);
