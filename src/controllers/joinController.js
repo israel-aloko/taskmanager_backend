@@ -49,6 +49,49 @@ const regenerateJoinCode = async (req, res) => {
     }
 };
 
+//GET /api/projects/lookup?code=XXX
+//any logged-in user. this is a read-only preview before committing to a join request.
+const lookupByJoinCode = async (req, res) => {
+    try {
+        const { code } = req.query;
+
+        if (!code || !code.trim()) {
+            return res.status(400).json({ message: 'A join code is required.'});
+        }
+
+        const project = await Project.findOne({ joinCode: code.trim().toUpperCase() })
+            .select('name description members');
+
+        if (!project) {
+            return res.status(404).json({ message: 'Invalid join code.' });
+        }
+
+        const alreadyMember = project.members.some(
+            (m) => m.user.toString() === req.user._id.toString()
+        );
+
+        const existingRequest = await JoinRequest.findOne({
+            project: project._id,
+            user: req.user._id,
+            status: 'pending',
+        });
+
+        return res.status(200).json({
+            project: {
+                _id: project._id,
+                name: project.name,
+                description: project.description,
+                memberCount: project.members.length,
+            },
+            alreadyMember,
+            hasPendingRequest: Boolean(existingRequest),
+        });
+    } catch (error) {
+        console.error('lookupByJoinCode error:', error.message);
+        return res.status(500).json({ message: 'Server error looking up join code.' });
+    }
+};
+
 //POST /api/projects/join
 //Any logged-in user. Body: { joinCode }
 const requestToJoin = async (req, res) => {
@@ -124,7 +167,7 @@ const approveJoinRequest = async (req, res) => {
         const { reqId } = req.params;
         const project = req.project;
 
-        const joinRequest = await joinRequest.findOne({ _id: reqId, project: project._id });
+        const joinRequest = await JoinRequest.findOne({ _id: reqId, project: project._id });
 
         if (!joinRequest) {
             return res.status(404).json({ message: 'Join request not found.'});
@@ -187,4 +230,5 @@ module.exports = {
     getJoinRequests,
     approveJoinRequest,
     rejectJoinRequest,
+    lookupByJoinCode,
 };

@@ -89,6 +89,7 @@ const getInviteByToken = async (req, res) => {
 
         const invite = await Invite.findOne({ token })
             .populate('project', 'name description')
+            // .populate('project', 'name description members')
             .populate('invitedBy', 'fullname');
 
         if (!invite) {
@@ -130,7 +131,7 @@ const acceptInvite = async (req, res) => {
     try {
         const { token } = req.params;
 
-        const invite = await Invite.findOne({ token }).populate('project');
+        const invite = await Invite.findOne({ token }).populate('project', 'name description members');
 
         if (!invite) {
             return res.status(404).json({ message: 'Invite not found.' });

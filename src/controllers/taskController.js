@@ -43,8 +43,8 @@ const createTask = async (req, res) => {
 const getProjectTasks = async (req, res) => {
     try {
         const tasks = await Task.find({ project: req.project._id} )
-            .populate('assignedTo', 'firstName lastName')
-            .populate('createdBy', 'firstName lastName')
+            .populate('assignedTo', 'fullname')
+            .populate('createdBy', 'fullname')
             .sort({ createdAt: -1});
 
         return res.status(200).json({ tasks });
@@ -75,8 +75,8 @@ const getMyTasks = async (req, res) => {
 const getTaskById = async (req, res) => {
     try {
         const task = await req.task.populate([
-            { path: 'assignedTo', select: ' firstName lastName' },
-            { path: 'createdBy', select: 'firstName lastName' },
+            { path: 'assignedTo', select: ' fullname' },
+            { path: 'createdBy', select: 'fullname' },
         ]);
 
         return res.status(200).json({ task });

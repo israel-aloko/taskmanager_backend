@@ -19,6 +19,7 @@ const {
     getJoinCode,
     regenerateJoinCode,
     requestToJoin,
+    lookupByJoinCode,
     getJoinRequests,
     approveJoinRequest,
     rejectJoinRequest,
@@ -30,6 +31,7 @@ router.use(isAuthenticated);
 router.post('/', createProject);
 router.get('/', getMyProjects);
 router.post('/join', requestToJoin);
+router.get('/lookup', lookupByJoinCode);
 
 router.get('/:id', requireProjectMember, getProjectById);
 router.patch('/:id', requireProjectMember, requireProjectAdmin, updateProject);
