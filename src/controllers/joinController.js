@@ -1,8 +1,10 @@
 const Project = require('../models/Project');
 const JoinRequest = require('../models/JoinRequest');
 const generateJoinCode = require('../config/generateJoinCode');
+const logActivity = require('../utils/logActivity');
+const notifyUsers = require('../utils/notifyUsers');
 
-//generates a joinCode that doesn't collide with an existing one.
+//generates a unique joinCode
 async function generateUniqueJoinCode() {
     let code;
     let exists = true;
@@ -56,7 +58,7 @@ const lookupByJoinCode = async (req, res) => {
         const { code } = req.query;
 
         if (!code || !code.trim()) {
-            return res.status(400).json({ message: 'A join code is required.'});
+            return res.status(400).json({ message: 'A join code is required.' });
         }
 
         const project = await Project.findOne({ joinCode: code.trim().toUpperCase() })
@@ -97,12 +99,12 @@ const lookupByJoinCode = async (req, res) => {
 const requestToJoin = async (req, res) => {
     try {
         const { joinCode } = req.body;
-        
+
         if (!joinCode || !joinCode.trim()) {
-            return res.status(400).json({ message: 'A join code is required.'});
+            return res.status(400).json({ message: 'A join code is required.' });
         }
 
-        const project = await Project.findOne({ joinCode: joinCode.trim().toUpperCase()});
+        const project = await Project.findOne({ joinCode: joinCode.trim().toUpperCase() });
 
         if (!project) {
             return res.status(404).json({ message: 'Invalid join code.' });
@@ -113,7 +115,7 @@ const requestToJoin = async (req, res) => {
         );
 
         if (alreadyMember) {
-            return res.status(400).json({ message: 'You are already a member of this project.'});
+            return res.status(400).json({ message: 'You are already a member of this project.' });
         }
 
         const existingRequest = await JoinRequest.findOne({
@@ -170,11 +172,11 @@ const approveJoinRequest = async (req, res) => {
         const joinRequest = await JoinRequest.findOne({ _id: reqId, project: project._id });
 
         if (!joinRequest) {
-            return res.status(404).json({ message: 'Join request not found.'});
+            return res.status(404).json({ message: 'Join request not found.' });
         }
 
         if (joinRequest.status !== 'pending') {
-            return res.status(400).json({ message: `This request has already been ${joinRequest.status}.`});
+            return res.status(400).json({ message: `This request has already been ${joinRequest.status}.` });
         }
 
         const alreadyMember = project.members.some(
@@ -184,6 +186,26 @@ const approveJoinRequest = async (req, res) => {
         if (!alreadyMember) {
             project.members.push({ user: joinRequest.user, role: 'member' });
             await project.save();
+
+            await logActivity({
+                project: project._id,
+                actor: joinRequest.user,
+                type: 'member_joined',
+                metadata: { via: 'join_code' },
+            });
+
+            const adminIds = project.members
+                .filters((m) => m.role === 'admin')
+                .map((m) => m.user);
+
+            await notifyUsers({
+                recipients: adminIds,
+                project: project._id,
+                actor: joinRequest.user,
+                type: 'member_joined',
+                metadata: { via: 'join_code' },
+            });
+
         }
 
         joinRequest.status = 'approved';
@@ -202,20 +224,20 @@ const rejectJoinRequest = async (req, res) => {
     try {
         const { reqId } = req.params;
         const project = req.project;
- 
+
         const joinRequest = await JoinRequest.findOne({ _id: reqId, project: project._id });
- 
+
         if (!joinRequest) {
             return res.status(404).json({ message: 'Join request not found.' });
         }
- 
+
         if (joinRequest.status !== 'pending') {
             return res.status(400).json({ message: `This request has already been ${joinRequest.status}.` });
         }
- 
+
         joinRequest.status = 'rejected';
         await joinRequest.save();
- 
+
         return res.status(200).json({ message: 'Join request rejected.' });
     } catch (error) {
         console.error('rejectJoinRequest error:', error.message);

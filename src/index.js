@@ -11,6 +11,8 @@ const inviteRoutes = require('./routes/inviteRoutes');
 const userRoutes = require('./routes/userRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const projectTaskRoutes = require('./routes/projectTaskRoutes');
+const projectActivityRoutes = require('./routes/projectActivityRoutes');
+const notificationRoutes = require('./routes/notificationRoutes')
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,6 +41,8 @@ app.use('/api/invites', inviteRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/projects/:projectId/tasks', projectTaskRoutes);
+app.use('/api/projects/:projectId/activity', projectActivityRoutes);
+app.use('/api/notifications', notificationRoutes)
 
 app.get('/', (req, res) => {
     res.send('TaskManager backend is alive!');

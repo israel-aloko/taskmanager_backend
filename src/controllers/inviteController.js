@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const Invite = require('../models/Invite');
 const User = require('../models/User');
 const { sendProjectInvite } = require('../services/emailService');
+const logActivity = require('../utils/logActivity');
+const notifyUsers = require('../utils/notifyUsers');
 
 const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -11,13 +13,13 @@ const sendInvite = async (req, res) => {
     try {
         const { email } = req.body;
         const project = req.project;
- 
+
         if (!email || !email.trim()) {
             return res.status(400).json({ message: 'An email address is required.' });
         }
- 
+
         const normalizedEmail = email.trim().toLowerCase();
- 
+
         // if user is already a member, 
         const targetUser = await User.findOne({ email: normalizedEmail });
         if (targetUser) {
@@ -37,9 +39,9 @@ const sendInvite = async (req, res) => {
         if (existingInvite) {
             return res.status(400).json({ message: 'An invite is already pending for this email.' });
         }
- 
+
         const token = crypto.randomBytes(32).toString('hex');
- 
+
         const invite = await Invite.create({
             project: project._id,
             email: normalizedEmail,
@@ -47,13 +49,13 @@ const sendInvite = async (req, res) => {
             token,
             expiresAt: new Date(Date.now() + INVITE_EXPIRY_MS),
         });
- 
+
         await sendProjectInvite(normalizedEmail, {
             projectName: project.name,
             inviterName: req.user.fullname,
             token,
         });
- 
+
         return res.status(201).json({ message: 'Invite sent successfully.', invite });
     } catch (error) {
         console.error('sendInvite error:', error.message);
@@ -71,12 +73,12 @@ const getMyInvites = async (req, res) => {
         })
             .populate('project', 'name description deadline')
             .populate('invitedBy', 'fullname email')
-            .sort({ createdAt: -1});
+            .sort({ createdAt: -1 });
 
         return res.status(200).json({ invites });
     } catch (error) {
         console.error('getMyInvites error:', error.message);
-        return res.status(500).json({ message: 'Server error fetching invites.'});
+        return res.status(500).json({ message: 'Server error fetching invites.' });
     }
 };
 
@@ -138,7 +140,7 @@ const acceptInvite = async (req, res) => {
         }
 
         if (invite.status !== 'pending') {
-            return res.status(400).json({ message: `This invite has already been ${invite.status}.`});
+            return res.status(400).json({ message: `This invite has already been ${invite.status}.` });
         }
 
         if (invite.expiresAt < new Date()) {
@@ -148,9 +150,9 @@ const acceptInvite = async (req, res) => {
         }
 
         if (invite.email !== req.user.email.toLowerCase()) {
-            return res.status(403).json({ message: 'This invite was not sent to your email address.'});
+            return res.status(403).json({ message: 'This invite was not sent to your email address.' });
         }
-        
+
         const project = invite.project;
 
         const alreadyMember = project.members.some(
@@ -160,8 +162,27 @@ const acceptInvite = async (req, res) => {
         if (!alreadyMember) {
             project.members.push({ user: req.user._id, role: 'member' });
             await project.save();
+
+            await logActivity({
+                project: project._id,
+                actor: req.user._id,
+                type: 'member_joined',
+                metadata: { via: 'invite' },
+            });
+
+            const adminIds = project.members
+                .filter((m) => m.role === 'admin')
+                .map((m) => m.user);
+
+            await notifyUsers({
+                recipients: adminIds,
+                project: project._id,
+                actor: req.user._id,
+                type: 'member_joined',
+                metadata: { via: 'invite' },
+            });
         }
-        
+
         invite.status = 'accepted';
         await invite.save();
 
@@ -176,24 +197,24 @@ const acceptInvite = async (req, res) => {
 const declineInvite = async (req, res) => {
     try {
         const { token } = req.params;
- 
+
         const invite = await Invite.findOne({ token });
- 
+
         if (!invite) {
             return res.status(404).json({ message: 'Invite not found.' });
         }
- 
+
         if (invite.status !== 'pending') {
             return res.status(400).json({ message: `This invite has already been ${invite.status}.` });
         }
- 
+
         if (invite.email !== req.user.email.toLowerCase()) {
             return res.status(403).json({ message: 'This invite was not sent to your email address.' });
         }
- 
+
         invite.status = 'declined';
         await invite.save();
- 
+
         return res.status(200).json({ message: 'Invite declined.' });
     } catch (error) {
         console.error('declineInvite error:', error.message);

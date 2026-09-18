@@ -1,4 +1,5 @@
 const Project = require('../models/Project');
+const logActivity = require('../utils/logActivity');
 
 //POST /api/projects
 //Creates a project. Creator becomes owner and is auto-added as admin member.
@@ -17,6 +18,13 @@ const createProject = async(req, res) => {
             owner: req.user._id,
             members: [{ user: req.user._id, role: 'admin' }],
         });
+
+        await logActivity({
+            project: project._id,
+            actor: req.user._id,
+            type: 'project_created',
+            metadata: { projectName: project.name },
+        })
 
         return res.status(201).json({ message: 'Project created successfully.', project});
     } catch (error) {
