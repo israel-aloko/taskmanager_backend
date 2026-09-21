@@ -1,5 +1,5 @@
-const Notification = require('../models/Notification')
-
+const Notification = require('../models/Notification');
+const { getIO } = require('../socket'); 
 //creates notifications for one or more recipients.
 //fire-and-forget - a failure here should never break the primary action.
 //automatically excludes the actor from the recipient list.
@@ -21,7 +21,19 @@ const notifyUsers = async ({ recipients, project, actor, type, targetTask = null
             metadata,
         }))
 
-        await Notification.insertMany(docs)
+        const created = await Notification.insertMany(docs)
+
+        //emit each notification to its recipient's personal room
+        try {
+            const io = getIO()
+            created.forEach((notification) => {
+                io.to(notification.recipient.toString()).emit('new_notification', notification)
+            })
+        } catch (socketError) {
+            console.error('Socket emit failed:', socketError.message)
+        }
+
+        // await Notification.insertMany(docs)
     } catch (error) {
         console.error('Failed to create notifications:', error)
     }

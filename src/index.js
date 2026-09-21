@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 
+const http = require('http');
+
 const authRoutes = require('./routes/authRoutes');
 const registerRoutes = require('./routes/registerRoutes');
 const projectRoutes = require('./routes/projectRoutes');
@@ -12,7 +14,8 @@ const userRoutes = require('./routes/userRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const projectTaskRoutes = require('./routes/projectTaskRoutes');
 const projectActivityRoutes = require('./routes/projectActivityRoutes');
-const notificationRoutes = require('./routes/notificationRoutes')
+const notificationRoutes = require('./routes/notificationRoutes');
+const { initSocket } = require('./socket');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -42,12 +45,19 @@ app.use('/api/users', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/projects/:projectId/tasks', projectTaskRoutes);
 app.use('/api/projects/:projectId/activity', projectActivityRoutes);
-app.use('/api/notifications', notificationRoutes)
+app.use('/api/notifications', notificationRoutes);
+
+const httpServer = http.createServer(app);
+initSocket(httpServer);
+
+httpServer.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+})
 
 app.get('/', (req, res) => {
     res.send('TaskManager backend is alive!');
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+// app.listen(PORT, () => {
+//     console.log(`Server running on http://localhost:${PORT}`);
+// });
