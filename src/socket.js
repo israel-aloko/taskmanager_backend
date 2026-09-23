@@ -37,7 +37,7 @@ const initSocket = (httpServer) => {
             socket.userId = user._id.toString();
             next();
         } catch (error) {
-            console.error('Scoket auth error:', error.message);
+            console.error('Socket auth error:', error.message);
             next(new Error('Invalid or expired token'));
         }
     });

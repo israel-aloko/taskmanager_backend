@@ -4,6 +4,7 @@ const Task = require("../models/Task");
 const Project = require("../models/Project");
 const logActivity = require("../utils/logActivity");
 const Notification = require('../models/Notification');
+const notifyUsers = require("../utils/notifyUsers");
 
 const createComment = async (req, res) => {
     try {
@@ -63,36 +64,86 @@ const createComment = async (req, res) => {
             metadata: { taskTitle: task.title },
         });
 
-        //One notification per valid mention. Fire-and-forget-style loop
-        //a failed notification shouldn't fail the comment create, so 
-        //errors are caught per-item rather than propagated.
-        await Promise.all(
-            validMentions.map((userId) =>
-                Notification.create({
-                    recipient: userId,
-                    project: task.project,
-                    actor: req.user._id,
-                    type: 'comment_mention',
-                    targetTask: task._id,
-                    metadata: { taskTitle: task.title, excerpt: content.trim().slice(0, 140)},
-                }).catch((err) => console.error('comment_mention notification error:', err.message))
-            )
-        );
+        const excerpt = content.trim().slice(0, 140);
 
-        //notify the parent comment's author on a reply - unless they're also being @mentioned in this same comment
-        if (parent && !validMentions.some((id) => id.toString() === parent.author.toString())) {
-            const isSelfReply = parent.author.toString() === req.user._id.toString();
-            if (!isSelfReply) {
-                await Notification.create({
-                    recipient: parent.author,
-                    project: task.project,
-                    actor: req.user._id,
-                    type: 'comment_reply',
-                    targetTask: task._id,
-                    metadata: { taskTitle: task.title, excerpt: content.trim().slice(0, 140)},
-                }).catch((err) => console.error('comment_reply notification error:', err.message));
-            }
+        //track who's already been notified about this comment, so the task create notification never duplicates a mention/reply one.
+
+        const alreadyNotified = new Set();
+
+        //@mentions
+        if (validMentions.length > 0) {
+            await notifyUsers({
+                recipients: validMentions,
+                project: task.project,
+                actor: req.user._id,
+                type: 'comment_mention',
+                targetTask: task._id,
+                metadata: { taskTitle: task.title, excerpt },
+            });
+            validMentions.forEach((id) => alreadyNotified.add(id.toString()));
         }
+
+        //reply to a parent comment's author
+        if (parent && !alreadyNotified.has(parent.author.toString())) {
+            await notifyUsers({
+                recipients: [parent.author],
+                project: task.project,
+                actor: req.user._id,
+                type: 'comment_reply',
+                targetTask: task._id,
+                metadata: { taskTitle: task.title, excerpt },
+            });
+            alreadyNotified.add(parent.author.toString());
+        }
+        
+
+        //task creator, general comment - only if not already notified via
+        //mention/reply above, and not if they're commenting on their own task.
+
+        if (
+            task.createdBy &&
+            !alreadyNotified.has(task.createdBy.toString())
+        ) {
+            await notifyUsers({
+                recipients: [task.createdBy],
+                project: task.project,
+                actor: req.user._id,
+                type: 'comment_added',
+                targetTask: task._id,
+                metadata: { taskTitle: task.title, excerpt },
+            });
+        }
+
+        // //One notification per valid mention. Fire-and-forget-style loop
+        // //a failed notification shouldn't fail the comment create, so 
+        // //errors are caught per-item rather than propagated.
+        // await Promise.all(
+        //     validMentions.map((userId) =>
+        //         Notification.create({
+        //             recipient: userId,
+        //             project: task.project,
+        //             actor: req.user._id,
+        //             type: 'comment_mention',
+        //             targetTask: task._id,
+        //             metadata: { taskTitle: task.title, excerpt: content.trim().slice(0, 140)},
+        //         }).catch((err) => console.error('comment_mention notification error:', err.message))
+        //     )
+        // );
+
+        // //notify the parent comment's author on a reply - unless they're also being @mentioned in this same comment
+        // if (parent && !validMentions.some((id) => id.toString() === parent.author.toString())) {
+        //     const isSelfReply = parent.author.toString() === req.user._id.toString();
+        //     if (!isSelfReply) {
+        //         await Notification.create({
+        //             recipient: parent.author,
+        //             project: task.project,
+        //             actor: req.user._id,
+        //             type: 'comment_reply',
+        //             targetTask: task._id,
+        //             metadata: { taskTitle: task.title, excerpt: content.trim().slice(0, 140)},
+        //         }).catch((err) => console.error('comment_reply notification error:', err.message));
+        //     }
+        // }
 
         const populated = await comment.populate([
             { path: 'author', select: 'fullname' },
