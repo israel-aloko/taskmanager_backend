@@ -23,10 +23,15 @@ const notifyUsers = async ({ recipients, project, actor, type, targetTask = null
 
         const created = await Notification.insertMany(docs)
 
+        const populated = await Notification.populate(created, {
+            path: 'actor',
+            select: 'fullname',
+        })
+
         //emit each notification to its recipient's personal room
         try {
             const io = getIO()
-            created.forEach((notification) => {
+            populated.forEach((notification) => {
                 io.to(notification.recipient.toString()).emit('new_notification', notification)
             })
         } catch (socketError) {

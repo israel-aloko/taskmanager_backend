@@ -15,7 +15,13 @@ const taskRoutes = require('./routes/taskRoutes');
 const projectTaskRoutes = require('./routes/projectTaskRoutes');
 const projectActivityRoutes = require('./routes/projectActivityRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+
+const taskCommentRoutes = require('./routes/taskCommentRoutes');
+const commentRoutes = require('./routes/commentRoutes');
+
 const { initSocket } = require('./socket');
+
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,6 +52,8 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/projects/:projectId/tasks', projectTaskRoutes);
 app.use('/api/projects/:projectId/activity', projectActivityRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/tasks/:taskId/comments', taskCommentRoutes);
+app.use('/api/comments', commentRoutes);
 
 const httpServer = http.createServer(app);
 initSocket(httpServer);
