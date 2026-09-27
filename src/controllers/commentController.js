@@ -97,15 +97,18 @@ const createComment = async (req, res) => {
         }
         
 
-        //task creator, general comment - only if not already notified via
+        //General comment: notify the assignee if one exists, otherwise
+        //fall back to the task creator - only if not already notified via
         //mention/reply above, and not if they're commenting on their own task.
+        
+        const commentAddedRecipient = task.assignedTo || task.createdBy;
 
         if (
-            task.createdBy &&
-            !alreadyNotified.has(task.createdBy.toString())
+            commentAddedRecipient &&
+            !alreadyNotified.has(commentAddedRecipient.toString())
         ) {
             await notifyUsers({
-                recipients: [task.createdBy],
+                recipients: [commentAddedRecipient],
                 project: task.project,
                 actor: req.user._id,
                 type: 'comment_added',

@@ -11,6 +11,8 @@ const {
     updateProject,
     deleteProject,
     removeMember,
+    updateMemberRole,
+    leaveProject,
 } = require('../controllers/projectController');
 
 const {sendInvite} = require('../controllers/inviteController');
@@ -38,6 +40,7 @@ router.patch('/:id', requireProjectMember, requireProjectAdmin, updateProject);
 router.delete('/:id', requireProjectMember, requireProjectAdmin, deleteProject);
 
 router.delete('/:id/members/:userId', requireProjectMember, requireProjectAdmin, removeMember);
+router.patch('/:id/members/:userId/role', requireProjectMember, requireProjectAdmin, updateMemberRole);
 
 router.post('/:id/invites', requireProjectMember, requireProjectAdmin, sendInvite);
 
@@ -46,5 +49,7 @@ router.post('/:id/regenerate-code', requireProjectMember, requireProjectAdmin, r
 router.get('/:id/join-requests', requireProjectMember, requireProjectAdmin, getJoinRequests);
 router.post('/:id/join-requests/:reqId/approve', requireProjectMember, requireProjectAdmin, approveJoinRequest);
 router.post('/:id/join-requests/:reqId/reject', requireProjectMember, requireProjectAdmin, rejectJoinRequest);
+
+router.post('/:id/leave', requireProjectMember, leaveProject);
 
 module.exports = router;

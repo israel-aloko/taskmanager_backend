@@ -17,6 +17,20 @@ async function generateUniqueJoinCode() {
     return code;
 }
 
+const getAdminIds = (project, excludeUserId) =>
+    project.members
+        .filter((m) => m.role === 'admin')
+        .map((m) => m.user)
+        .filter((id) => !excludeUserId || id.toString() !== excludeUserId.toString());
+
+const safeNotify = async (payload) => {
+    try {
+        await notifyUsers(payload);
+    } catch (error) {
+        console.error('notification error:', error.message);
+    }
+};
+
 //GET /api/projects/:id/join-code
 //Admin only. Returns the existing code, or generates one on first request.
 const getJoinCode = async (req, res) => {
@@ -133,6 +147,14 @@ const requestToJoin = async (req, res) => {
             user: req.user._id,
         });
 
+        await safeNotify({
+            recipients: getAdminIds(project),
+            project: project._id,
+            actor: req.user.id,
+            type: 'join_request_received',
+            metadata: { joinRequestId: joinRequest._id, projectName: project.name, via: 'join_code' }
+        });
+
         return res.status(201).json({
             message: 'Join request submitted. Waiting for admin approval.',
             joinRequest,
@@ -187,29 +209,64 @@ const approveJoinRequest = async (req, res) => {
             project.members.push({ user: joinRequest.user, role: 'member' });
             await project.save();
 
-            await logActivity({
-                project: project._id,
-                actor: joinRequest.user,
-                type: 'member_joined',
-                metadata: { via: 'join_code' },
-            });
+            // await logActivity({
+            //     project: project._id,
+            //     actor: joinRequest.user,
+            //     type: 'member_joined',
+            //     metadata: { via: 'join_code' },
+            // });
 
-            const adminIds = project.members
-                .filters((m) => m.role === 'admin')
-                .map((m) => m.user);
+            // const adminIds = project.members
+            //     .filter((m) => m.role === 'admin')
+            //     .map((m) => m.user);
 
-            await notifyUsers({
-                recipients: adminIds,
-                project: project._id,
-                actor: joinRequest.user,
-                type: 'member_joined',
-                metadata: { via: 'join_code' },
-            });
+            // await notifyUsers({
+            //     recipients: adminIds,
+            //     project: project._id,
+            //     actor: joinRequest.user,
+            //     type: 'member_joined',
+            //     metadata: { via: 'join_code' },
+            // });
 
         }
 
         joinRequest.status = 'approved';
         await joinRequest.save();
+
+        try {
+            if (!alreadyMember) {
+                await logActivity({
+                    project: project._id,
+                    actor: joinRequest.user,
+                    type: 'member_joined',
+                    metadata: { via: 'join_code' },
+                });
+
+                const otherAdminIds = project.members
+                    .filter((m) => m.role === 'admin' && m.user.toString() !== req.user._id.toString())
+                    .map((m) => m.user);
+
+                // Tell the OTHER admins (not the one who just approved)
+                await notifyUsers({
+                    recipients: otherAdminIds,
+                    project: project._id,
+                    actor: joinRequest.user,
+                    type: 'member_joined',
+                    metadata: { projectName: project.name, via: 'join_code' },
+                });
+            }
+
+            // Tell the requester they're in
+            await notifyUsers({
+                recipients: [joinRequest.user],
+                project: project._id,
+                actor: req.user._id,
+                type: 'join_request_approved',
+                metadata: { projectName: project.name },
+            });
+        } catch (sideEffectError) {
+            console.error('approveJoinRequest side-effect error:', sideEffectError.message);
+        }
 
         return res.status(200).json({ message: 'Join request approved.', project });
     } catch (error) {
@@ -237,6 +294,14 @@ const rejectJoinRequest = async (req, res) => {
 
         joinRequest.status = 'rejected';
         await joinRequest.save();
+
+        await safeNotify({
+            recipients: [joinRequest.user],
+            project: project._id,
+            actor: req.user._id,
+            type: 'join_request_rejected',
+            metadata: { projectName: project.name },
+        });
 
         return res.status(200).json({ message: 'Join request rejected.' });
     } catch (error) {
