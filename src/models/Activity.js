@@ -22,6 +22,8 @@ const activitySchema = new mongoose.Schema({
             'task_deleted',
             'member_joined',
             'project_created',
+            'project_completed',
+            'project_reopened',
             'comment_added',
         ],
         required: true,

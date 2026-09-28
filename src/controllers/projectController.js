@@ -47,7 +47,7 @@ const createProject = async(req, res) => {
 const getMyProjects = async (req, res) => {
     try {
         const projects = await Project.find({ 'members.user': req.user._id })
-            .select('name description deadline owner members createdAt')
+            .select('name description deadline owner members createdAt status')
             .sort({ createdAt: -1 });
 
         return res.status(200).json({ projects });
@@ -246,7 +246,73 @@ const leaveProject = async (req, res) => {
         console.error('leaveProject error:', error.message);
         return res.status(500).json({ message: 'Server error leaving project.' });
     }
-}
+};
+
+//PATCH /api/projects/:id/complete
+//Admin only. If incomplete tasks exists, requires req.body.force = true to proceed.
+const completeProject = async (req, res) => {
+    try {
+        const project = req.project;
+
+        if (project.status === 'completed') {
+            return res.status(400).json({ message: 'This project is already completed.' });
+        }
+
+        const incompleteCount = await Task.countDocuments({
+            project: project._id,
+            status: { $ne: 'done' },
+        });
+
+        if (incompleteCount > 0 && !req.body.force) {
+            return res.status(200).json({
+                requiresConfirmation: true,
+                incompleteCount,
+            });
+        }
+
+        project.status = 'completed';
+        await project.save();
+
+        await logActivity({
+            project: project._id,
+            actor: req.user._id,
+            type: 'project_completed',
+            metadata: { projectName: project.name, incompleteCount },
+        });
+
+        return res.status(200).json({ message: 'Project marked as completed.', project });
+    } catch (error) {
+        console.error('completeProject error:', error.message);
+        return res.status(500).json({ message: 'Server error completing project.' });
+    }
+};
+
+//PATCH /api/projects/:id/reopen
+//admin only. No confirmation needed - reopening is always safe.
+const reopenProject = async (req, res) => {
+    try {
+        const project = req.project;
+
+        if (project.status === 'active') {
+            return res.status(400).json({ message: 'This project is already active.' });
+        }
+
+        project.status = 'active';
+        await project.save();
+
+        await logActivity({
+            project: project._id,
+            actor: req.user._id,
+            type: 'project_reopened',
+            metadata: { projectName: project.name },
+        });
+
+        return res.status(200).json({ message: 'Project reopened.', project });
+    } catch (error) {
+        console.error('reopenProject error:', error.message);
+        return res.status(500).json({ message: 'Server error reopening project.' });
+    }
+};
 
 module.exports = {
     createProject, 
@@ -257,6 +323,8 @@ module.exports = {
     removeMember,
     updateMemberRole,
     leaveProject,
+    completeProject,
+    reopenProject,
 };
 
 

@@ -13,6 +13,8 @@ const {
     removeMember,
     updateMemberRole,
     leaveProject,
+    completeProject,
+    reopenProject,
 } = require('../controllers/projectController');
 
 const {sendInvite} = require('../controllers/inviteController');
@@ -51,5 +53,8 @@ router.post('/:id/join-requests/:reqId/approve', requireProjectMember, requirePr
 router.post('/:id/join-requests/:reqId/reject', requireProjectMember, requireProjectAdmin, rejectJoinRequest);
 
 router.post('/:id/leave', requireProjectMember, leaveProject);
+
+router.patch('/:id/complete', requireProjectMember, requireProjectAdmin, completeProject);
+router.patch('/:id/reopen', requireProjectMember, requireProjectAdmin, reopenProject);
 
 module.exports = router;

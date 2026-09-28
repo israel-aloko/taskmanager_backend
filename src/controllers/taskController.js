@@ -12,6 +12,10 @@ const createTask = async (req, res) => {
             return res.status(400).json({ message: 'Title is required.' });
         }
 
+        if (req.project.status === 'completed') {
+            return res.status(400).json({ message: 'This project is completed. Reopen it to add new tasks.'});
+        }
+
         //If an assignee was provided, make sure they're actually a member
         // of this project before we let the admin assign them.
         if (assignedTo) {
