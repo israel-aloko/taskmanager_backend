@@ -19,6 +19,8 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const taskCommentRoutes = require('./routes/taskCommentRoutes');
 const commentRoutes = require('./routes/commentRoutes');
 
+const dashboardRoutes = require('./routes/dashboardRoutes');
+
 const { initSocket } = require('./socket');
 
 
@@ -54,6 +56,7 @@ app.use('/api/projects/:projectId/activity', projectActivityRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/tasks/:taskId/comments', taskCommentRoutes);
 app.use('/api/comments', commentRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 const httpServer = http.createServer(app);
 initSocket(httpServer);
