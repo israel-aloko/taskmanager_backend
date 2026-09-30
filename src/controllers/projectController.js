@@ -1,6 +1,8 @@
 const Project = require('../models/Project');
 const logActivity = require('../utils/logActivity');
 const Task = require('../models/Task');
+const notifyUsers = require('../utils/notifyUsers');
+const { remindProjectIfDue } = require('../jobs/deadlineReminders');
 
 //returnd true if userId is the only admin left on this project
 const isLastAdmin = (project, userId) => {
@@ -12,12 +14,12 @@ const isLastAdmin = (project, userId) => {
 
 //POST /api/projects
 //Creates a project. Creator becomes owner and is auto-added as admin member.
-const createProject = async(req, res) => {
+const createProject = async (req, res) => {
     try {
         const { name, description, deadline } = req.body;
 
         if (!name || !name.trim()) {
-            return res.status(400).json({ message: 'Project name is required.'});
+            return res.status(400).json({ message: 'Project name is required.' });
         }
 
         const project = await Project.create({
@@ -35,10 +37,10 @@ const createProject = async(req, res) => {
             metadata: { projectName: project.name },
         })
 
-        return res.status(201).json({ message: 'Project created successfully.', project});
+        return res.status(201).json({ message: 'Project created successfully.', project });
     } catch (error) {
         console.error('createProject error:', error.message);
-        return res.status(500).json({ message: 'Server error creating project.'});
+        return res.status(500).json({ message: 'Server error creating project.' });
     }
 };
 
@@ -53,7 +55,7 @@ const getMyProjects = async (req, res) => {
         return res.status(200).json({ projects });
     } catch (error) {
         console.error('getMyProjects error:', error.message);
-        return res.status(500).json({ message: 'Server error fetching projects.'});
+        return res.status(500).json({ message: 'Server error fetching projects.' });
     }
 };
 
@@ -82,22 +84,45 @@ const updateProject = async (req, res) => {
 
         if (name !== undefined) {
             if (!name.trim()) {
-                return res.status(400).json({ message: 'Project name cannot be empty.'});
+                return res.status(400).json({ message: 'Project name cannot be empty.' });
             }
             project.name = name.trim();
         }
-        
+
         if (description !== undefined) {
             project.description = description.trim();
         }
 
         if (deadline !== undefined) {
-            project.deadline = deadline || null;
+            const newDeadline = deadline || null;
+            const changed =
+                (project.deadline?.getTime() ?? null) !==
+                (newDeadline ? new Date(newDeadline).getTime() : null);
+
+            project.deadline = newDeadline;
+            if (changed) project.reminders = { dayBefore: false, dueToday: false };
+        }
+
+        let deadlineChanged = false;
+
+        if (deadline !== undefined) {
+            const newDeadline = deadline || null;
+            deadlineChange =
+                (project.deadline?.getTime() ?? null) !==
+                (newDeadline ? new Date(newDeadline).getTime() : null);
+            
+            project.deadline = newDeadline;
+            if (deadlineChanged) project.reminders = { dayBefore: false, dueToday: false };
         }
 
         await project.save();
 
-        return res.status(200).json({ message: 'Project updated successfully.', project})
+        if (deadlineChanged) {
+            remindProjectIfDue(project._id, req.user._id)
+                .catch((e) => console.error('remindProjectIfDue:', e.message));
+        }
+
+        return res.status(200).json({ message: 'Project updated successfully.', project })
 
     } catch (error) {
         console.error('updatedProject error:', error.message);
@@ -107,14 +132,39 @@ const updateProject = async (req, res) => {
 
 //DELETE /api/projects/:id
 //Admin only (enforced by requireProjectAdmin).
+// const deleteProject = async (req, res) => {
+//     try {
+//         await Project.findByIdAndDelete(req.project._id);
+
+//         return res.status(200).json({ message: 'Project deleted successfully.' });
+//     } catch (error) {
+//         console.error('deleteProject error:', error.message);
+//         return res.status(500).json({ message: 'Server error deleting project.' });
+//     }
+// };
 const deleteProject = async (req, res) => {
     try {
-        await Project.findByIdAndDelete(req.project._id);
+        const project = req.project;
 
-        return res.status(200).json({ message: 'Project deleted successfully.'});
+        const projectId = project._id;
+        const projectName = project.name;
+        const recipients = project.members.map((m) => m.user);
+
+        await Task.deleteMany({ project: projectId });
+        await Project.findByIdAndDelete(projectId);
+
+        await notifyUsers({
+            recipients,
+            project: projectId,
+            actor: req.user._id,
+            type: 'project_deleted',
+            metadata: { projectName },
+        });
+
+        return res.status(200).json({ message: 'Project deleted successfully.' });
     } catch (error) {
         console.error('deleteProject error:', error.message);
-        return res.status(500).json({ message: 'Server error deleting project.'});
+        return res.status(500).json({ message: 'Server error deleting project.' });
     }
 };
 
@@ -132,16 +182,33 @@ const removeMember = async (req, res) => {
         const memberExists = project.members.some((m) => m.user.toString() === userId);
 
         if (!memberExists) {
-            return res.status(404).json({ message: 'This user is not a member of the project.'});
+            return res.status(404).json({ message: 'This user is not a member of the project.' });
         }
 
         project.members = project.members.filter((m) => m.user.toString() !== userId);
         await project.save();
 
-        return res.status(200).json({ message: 'Member removed successfully.', project});
+        await logActivity({
+            project: project._id,
+            actor: req.user._id,
+            type: 'member_removed',
+            metadata: { targetUser: userId },
+        });
+
+        await Task.updateMany(
+            { project: project._id, assignedTo: userId },
+            { $set: { assignedTo: null } }
+        );
+
+        await notifyUsers({
+            recipients: [userId], project: project._id, actor: req.user._id,
+            type: 'member_removed', metadata: { projectName: project.name },
+        });
+
+        return res.status(200).json({ message: 'Member removed successfully.', project });
     } catch (error) {
         console.error('removeMember error:', error.message);
-        return res.status(500).json({ message: 'Server error removing member.'});
+        return res.status(500).json({ message: 'Server error removing member.' });
     }
 };
 
@@ -152,7 +219,7 @@ const updateMemberRole = async (req, res) => {
         const { role } = req.body;
 
         if (!['admin', 'member'].includes(role)) {
-            return res.status(400).json({ message: 'Role must be "admin" or "member".'});
+            return res.status(400).json({ message: 'Role must be "admin" or "member".' });
         }
 
         if (project.owner.toString() === userId) {
@@ -184,6 +251,7 @@ const updateMemberRole = async (req, res) => {
             });
         }
 
+        const previousRole = member.role;
         member.role = role;
         await project.save();
 
@@ -192,6 +260,14 @@ const updateMemberRole = async (req, res) => {
             actor: req.user._id,
             type: 'member_role_changed',
             metadata: { targetUser: userId, newRole: role },
+        });
+
+        await notifyUsers({
+            recipients: [userId],
+            project: project._id,
+            actor: req.user._id,
+            type: 'member_role_changed',
+            metadata: { projectName: project.name, previousRole, newRole: role },
         });
 
         return res.status(200).json({ message: 'Member role updated successfully.', project });
@@ -213,7 +289,7 @@ const leaveProject = async (req, res) => {
                 message: 'The project owner cannot leave. Delete the project instead, or transfer owenership first.',
             });
         }
-        
+
         const member = project.members.find((m) => m.user.toString() === userId.toString());
 
         if (!member) {
@@ -231,7 +307,7 @@ const leaveProject = async (req, res) => {
 
         await Task.updateMany(
             { project: project._id, assignedTo: userId },
-            { $set: {assignedTo: null }}
+            { $set: { assignedTo: null } }
         );
 
         await logActivity({
@@ -240,6 +316,14 @@ const leaveProject = async (req, res) => {
             type: 'member_left',
             metadata: {},
         });
+        
+        await notifyUsers({
+            recipients: project.members.filter((m) => m.role === 'admin').map((m) => m.user),
+            project: project._id,
+            actor: userId,
+            type: 'member_left',
+            metadata: {projectName: project.name},
+        })
 
         return res.status(200).json({ message: 'You have left the project.' });
     } catch (error) {
@@ -280,6 +364,14 @@ const completeProject = async (req, res) => {
             metadata: { projectName: project.name, incompleteCount },
         });
 
+        await notifyUsers({
+            recipients: project.members.map((m) => m.user),
+            project: project._id,
+            actor: req.user._id,
+            type: 'project_completed',
+            metadata: { projectName: project.name, incompleteCount },
+        });
+
         return res.status(200).json({ message: 'Project marked as completed.', project });
     } catch (error) {
         console.error('completeProject error:', error.message);
@@ -307,6 +399,14 @@ const reopenProject = async (req, res) => {
             metadata: { projectName: project.name },
         });
 
+        await notifyUsers({
+            recipients: project.members.map((m) => m.user),
+            project: project._id,
+            actor: req.user._id,
+            type: 'project_reopened',
+            metadata: { projectName: project.name },
+        });
+
         return res.status(200).json({ message: 'Project reopened.', project });
     } catch (error) {
         console.error('reopenProject error:', error.message);
@@ -315,7 +415,7 @@ const reopenProject = async (req, res) => {
 };
 
 module.exports = {
-    createProject, 
+    createProject,
     getMyProjects,
     getProjectById,
     updateProject,

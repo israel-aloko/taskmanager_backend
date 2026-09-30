@@ -52,6 +52,10 @@ const projectSchema = new mongoose.Schema(
             unique: true,
             sparse: true, //allows multiple docs with no joinCode without violating uniqueness.
         },
+        reminders: {
+            dayBefore: {type: Boolean, default: false},
+            dueToday: {type: Boolean, default: false},
+        },
     },
     { timestamps: true }
 );

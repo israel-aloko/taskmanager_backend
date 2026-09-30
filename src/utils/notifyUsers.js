@@ -3,23 +3,37 @@ const { getIO } = require('../socket');
 //creates notifications for one or more recipients.
 //fire-and-forget - a failure here should never break the primary action.
 //automatically excludes the actor from the recipient list.
-const notifyUsers = async ({ recipients, project, actor, type, targetTask = null, metadata = {} }) => {
+const notifyUsers = async ({ recipients, project, actor = null, type, targetTask = null, metadata = {} }) => {
     try {
-        //never notify the person who performed the action
-        const filteredRecipients = recipients.filter(
-            (r) => r && r.toString() !== actor.toString()
-        )
+        const unique = [...new Set(recipients.filter(Boolean).map((r) => r.toString()))]
+            .filter((r) => !actor || r !== actor.toString());
 
-        if (filteredRecipients.length === 0) return 
+        if (unique.length === 0) return;
 
-        const docs = filteredRecipients.map((recipient) => ({
+        const docs = unique.map((recipient) => ({
             recipient,
             project,
             actor,
             type,
             targetTask,
             metadata,
-        }))
+        }));
+
+        //never notify the person who performed the action
+        // const filteredRecipients = recipients.filter(
+        //     (r) => r && r.toString() !== actor.toString()
+        // )
+
+        // if (filteredRecipients.length === 0) return 
+
+        // const docs = filteredRecipients.map((recipient) => ({
+        //     recipient,
+        //     project,
+        //     actor,
+        //     type,
+        //     targetTask,
+        //     metadata,
+        // }))
 
         const created = await Notification.insertMany(docs)
 

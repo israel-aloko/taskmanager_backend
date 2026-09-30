@@ -40,6 +40,10 @@ const taskSchema = new mongoose.Schema(
             type: Date,
             default: null,
         },
+        reminders: {
+            dayBefore: {type: Boolean, default: false},
+            dueToday: {type: Boolean, default: false},
+        },
     },
     { timestamps: true }
 );

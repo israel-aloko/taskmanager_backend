@@ -22,6 +22,7 @@ const commentRoutes = require('./routes/commentRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 
 const { initSocket } = require('./socket');
+const { startDeadlineReminders } = require('./jobs/deadlineReminders');
 
 
 
@@ -42,7 +43,10 @@ app.use(express.json());
 app.use(cookieParser());
 
 mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('MongoDB connected'))
+    .then(() => {
+        console.log('MongoDB connected');
+        startDeadlineReminders();
+    })
     .catch((err) => console.error('MongoDB connection error:', err));
 
 app.use('/auth', authRoutes);

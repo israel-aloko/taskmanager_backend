@@ -15,13 +15,16 @@ const notificationSchema = new mongoose.Schema({
     actor: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true,
+        default: null,
     },
     type: {
         type: String,
         enum: ['task_assigned', 'task_status_changed', 'member_joined', 'task_deleted', 'comment_mention', 
         'comment_reply', 'comment_added', 'join_request_received', 'join_request_approved',
-        'join_request_rejected'],
+        'join_request_rejected', 
+        'task_unassigned', 'task_updated', 'task_deadline_approaching', 'task_due_today',
+        'project_deadline_approaching', 'project_due_today', 'member_role_changed', 'member_removed',
+        'project_completed', 'project_reopened', 'project_deleted', 'member_left'],
         required: true,
     },
     targetTask: {
