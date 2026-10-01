@@ -19,6 +19,8 @@ const {
 
 const {sendInvite} = require('../controllers/inviteController');
 
+const { getProjectAnalytics } = require('../controllers/analyticsController');
+
 const {
     getJoinCode,
     regenerateJoinCode,
@@ -57,4 +59,5 @@ router.post('/:id/leave', requireProjectMember, leaveProject);
 router.patch('/:id/complete', requireProjectMember, requireProjectAdmin, completeProject);
 router.patch('/:id/reopen', requireProjectMember, requireProjectAdmin, reopenProject);
 
+router.get('/:id/analytics', requireProjectMember, requireProjectAdmin, getProjectAnalytics );
 module.exports = router;

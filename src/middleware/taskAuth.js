@@ -37,46 +37,25 @@ const requireTaskProjectMember = async (req, res, next) => {
         return res.status(500).json({ message: 'Server error checking task/project membership.' });
     }
 };
-
-// Verifies the logged-in user is either a project admin OR the member this
-// task is assigned to. Used for the status-update route, where both roles
-// are allowed to act, unlike every other task route (admin-only).
-// Must run after requireTaskProjectMember (relies on req.task, req.membership).
+// Only the member this task is assigned to can change its status.
+// Admins have no exception: an unassigned task must be assigned first.
+// Must run after requireTaskProjectMember (relies on req.task).
 const requireTaskStatusPermission = (req, res, next) => {
-    if (!req.task || !req.membership) {
+    if (!req.task) {
         return res.status(500).json({
             message: 'requireTaskStatusPermission used without requireTaskProjectMember running first.',
         });
     }
 
-    const isAssignee = req.task.assignedTo && req.task.assignedTo.toString() === req.user._id.toString();
-    const isAdmin = req.membership.role === 'admin';
-    const isUnassigned = !req.task.assignedTo;
+    const isAssignee =
+        req.task.assignedTo &&
+        req.task.assignedTo.toString() === req.user._id.toString();
 
-    const allowed = isAssignee || (isUnassigned && isAdmin);
-
-    if (!allowed) {
-        return res.status(403).json({ message: 'Only the assigned member can update this tasks status'});
+    if (!isAssignee) {
+        return res.status(403).json({ message: "Only the assigned member can update this task's status." });
     }
 
     next();
-}
-// const requireTaskAdminOrAssignee = (req, res, next) => {
-//     if (!req.task || !req.membership) {
-//         return res.status(500).json({
-//             message: 'requireTaskAdminOrAssignee used without requireTaskProjectMember running first.',
-//         });
-//     }
-
-//     const isAdmin = req.membership.role === 'admin';
-//     const isAssignee = req.task.assignedTo && req.task.assignedTo.toString() === req.user._id.toString();
-
-//     if (!isAdmin && !isAssignee) {
-//         return res.status(403).json({ message: 'Only the project admin or the assigned member can update status.' });
-//     }
-
-//     next();
-// };
-
+};
 module.exports = { requireTaskProjectMember, requireTaskStatusPermission };
 // module.exports = { requireTaskProjectMember, requireTaskAdminOrAssignee };

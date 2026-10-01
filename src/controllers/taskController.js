@@ -64,7 +64,7 @@ const createTask = async (req, res) => {
             });
         }
 
-        remindProjectIfDue(task._id).catch((e) => console.error('remindTaskIfDue:', e.message));
+        remindTaskIfDue(task._id).catch((e) => console.error('remindTaskIfDue:', e.message));
 
         return res.status(201).json({ task });
     } catch (error) {
@@ -125,38 +125,50 @@ const getProjectTasks = async (req, res) => {
 //GET /api/tasks/mine
 //Cross-project "Assigned to Me" view. No Project param at all -
 // this is intentionally the one task route with no project/task middleware upstream.
+// const getMyTasks = async (req, res) => {
+//     try {
+//         const tasks = await Task.find({ assignedTo: req.user._id })
+//             .populate('project', 'name')
+//             .populate('assignedTo', 'fullname')
+//             .sort({ deadline: 1 });
+
+//         return res.status(200).json({ tasks });
+//     } catch (error) {
+//         console.error('getMyTasks error:', error.message);
+//         return res.status(500).json({ message: ' Server error fetching your tasks.' });
+//     }
+// };
 const getMyTasks = async (req, res) => {
     try {
         const tasks = await Task.find({ assignedTo: req.user._id })
             .populate('project', 'name')
-            .sort({ deadline: 1 });
+            .populate('assignedTo', 'fullname')
+            .sort({ deadline: 1 })
+            .lean();
 
-        return res.status(200).json({ tasks });
+        const counts = await Comment.aggregate([
+            {
+                $match: {
+                    task: { $in: tasks.map((t) => t._id) },
+                    isDeleted: { $ne: true },
+                },
+            },
+            { $group: { _id: '$task', count: { $sum: 1 } } },
+        ]);
+
+        const countMap = Object.fromEntries(counts.map((c) => [c._id.toString(), c.count]));
+
+        const withCounts = tasks.map((t) => ({
+            ...t,
+            commentCount: countMap[t._id.toString()] || 0,
+        }));
+
+        return res.status(200).json({ tasks: withCounts });
     } catch (error) {
         console.error('getMyTasks error:', error.message);
-        return res.status(500).json({ message: ' Server error fetching your tasks.' });
+        return res.status(500).json({ message: 'Server error fetching your tasks.' });
     }
 };
-// const getMyTasks = async (req, res) => {
-//     try {
-//         const tasks = await Task.find({ assignedTo: req.user._id })
-//             .populate('project', 'name status')
-//             .populate('assignedTo', 'fullname');
-
-//             //soonest deadline sorting first, tasks with no deadline last.
-//             tasks.sort((a, b) => {
-//                 if (!a.deadline && !b.deadline) return 0;
-//                 if (!a.deadline) return 1;
-//                 if (!b.deadline) return -1;
-//                 return new Date(a.deadline) - new Date(b.deadline);
-//             });
-
-//             return res.status(200).json({ tasks });
-//     } catch (error) {
-//         console.error('getMyTasks error:', error.message);
-//         return res.status(500).json({ message: 'Server error fetching your tasks.' });
-//     }
-// };
 
 //GET /api/tasks/:taskId
 // Any project member can view a single task.
@@ -296,6 +308,17 @@ const updateTaskStatus = async (req, res) => {
         const previousStatus = req.task.status;
 
         req.task.status = status;
+
+        if (previousStatus !== status) {
+            if (status === 'done') {
+                req.task.completedAt = new Date();
+                req.task.completedBy = req.user._id;
+            } else if (previousStatus === 'done') {
+                req.task.completedAt = null;
+                req.task.completedBy = null;
+            }
+        }
+        
         await req.task.save();
 
         if (previousStatus !== status) {

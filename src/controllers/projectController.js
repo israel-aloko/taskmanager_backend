@@ -82,6 +82,8 @@ const updateProject = async (req, res) => {
         const { name, description, deadline } = req.body;
         const project = req.project;
 
+        let deadlineChanged = false;
+
         if (name !== undefined) {
             if (!name.trim()) {
                 return res.status(400).json({ message: 'Project name cannot be empty.' });
@@ -95,22 +97,12 @@ const updateProject = async (req, res) => {
 
         if (deadline !== undefined) {
             const newDeadline = deadline || null;
-            const changed =
+
+            // Compare BEFORE assigning, otherwise old and new are always equal
+            deadlineChanged =
                 (project.deadline?.getTime() ?? null) !==
                 (newDeadline ? new Date(newDeadline).getTime() : null);
 
-            project.deadline = newDeadline;
-            if (changed) project.reminders = { dayBefore: false, dueToday: false };
-        }
-
-        let deadlineChanged = false;
-
-        if (deadline !== undefined) {
-            const newDeadline = deadline || null;
-            deadlineChange =
-                (project.deadline?.getTime() ?? null) !==
-                (newDeadline ? new Date(newDeadline).getTime() : null);
-            
             project.deadline = newDeadline;
             if (deadlineChanged) project.reminders = { dayBefore: false, dueToday: false };
         }
@@ -122,10 +114,9 @@ const updateProject = async (req, res) => {
                 .catch((e) => console.error('remindProjectIfDue:', e.message));
         }
 
-        return res.status(200).json({ message: 'Project updated successfully.', project })
-
+        return res.status(200).json({ message: 'Project updated successfully.', project });
     } catch (error) {
-        console.error('updatedProject error:', error.message);
+        console.error('updateProject error:', error.message);
         return res.status(500).json({ message: 'Server error updating project.' });
     }
 };

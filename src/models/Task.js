@@ -14,7 +14,7 @@ const taskSchema = new mongoose.Schema(
         project: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Project',
-            required: true, 
+            required: true,
         },
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
@@ -24,7 +24,7 @@ const taskSchema = new mongoose.Schema(
         assignedTo: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
-            default: null, 
+            default: null,
         },
         status: {
             type: String,
@@ -41,8 +41,17 @@ const taskSchema = new mongoose.Schema(
             default: null,
         },
         reminders: {
-            dayBefore: {type: Boolean, default: false},
-            dueToday: {type: Boolean, default: false},
+            dayBefore: { type: Boolean, default: false },
+            dueToday: { type: Boolean, default: false },
+        },
+        completedAt: {
+            type: Date,
+            default: null,
+        },
+        completedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            default: null,
         },
     },
     { timestamps: true }
